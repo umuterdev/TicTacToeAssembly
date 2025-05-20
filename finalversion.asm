@@ -38,7 +38,6 @@ msg_valid_move:     .asciiz "Hamle yapildi.\n"
 msg_turn1:          .asciiz "\nOyuncu 1'in sirasi\n"
 msg_turn2:          .asciiz "\nOyuncu 2'in sirasi\n"
 msg_win:            .asciiz "\nOyunu kazanan oyuncu: "
-cell_empty:         .asciiz "[ ]"
 left_bracket:       .asciiz "["
 right_bracket:      .asciiz "]"
 dashline:           .asciiz "-----------------------------------------\n"
@@ -70,19 +69,17 @@ show_target:
     syscall
     move $t0, $v0  # New stone size
 
-    # Validate stone size (must be 1, 2, or 3)
     li $t2, 1
     blt $t0, $t2, invalid_move
     li $t2, 3
     bgt $t0, $t2, invalid_move
 
-    # Ask for 0-80 input
     li $v0, 4
     la $a0, msg_place
     syscall
     li $v0, 5
     syscall
-    move $t3, $v0     # Cell index
+    move $t3, $v0
 
     li $t2, 0
     blt $t3, $t2, invalid_move
@@ -91,10 +88,9 @@ show_target:
 
     li $t2, 9
     divu $t3, $t2
-    mflo $s0          # mini board index
-    mfhi $t1          # cell in mini board
+    mflo $s0
+    mfhi $t1
 
-    # Compute absolute index and address
     sll $t4, $t3, 2
     la $t5, board
     add $t5, $t5, $t4
@@ -104,11 +100,11 @@ show_target:
 
     li $t7, 10
     divu $t6, $t7
-    mflo $t9     # Existing player
-    mfhi $t8     # Existing size
+    mflo $t9
+    mfhi $t8
 
-    ble $t0, $t8, invalid_move  # Must be larger
-    beq $s7, $t9, invalid_move  # Can't overwrite own stone
+    ble $t0, $t8, invalid_move
+    beq $s7, $t9, invalid_move
 
 store_stone:
     li $t7, 10
@@ -149,10 +145,58 @@ invalid_move:
     j main_loop
 
 print_ultimate_board:
-    li $t0, 0          # cell index
+    li $t0, 0
 print_outer_loop:
-    li $t1, 0          # column in row
+    li $t1, 0
 print_inner_loop:
+    li $t6, 9
+    divu $t0, $t6
+    mflo $t7
+    remu $t8, $t0, $t6
+
+    la $t9, mini_status
+    mul $s0, $t7, 4
+    add $t9, $t9, $s0
+    lw $s1, 0($t9)
+
+    li $t2, 4
+    beqz $s1, normal_print
+    bne $t8, $t2, skip_cell
+
+    li $v0, 4
+    la $a0, left_bracket
+    syscall
+    li $v0, 11
+    li $a0, 'X'
+    beq $s1, 1, pr_win
+    li $a0, 'Y'
+pr_win:
+    syscall
+    li $v0, 4
+    la $a0, right_bracket
+    syscall
+    j finish_cell
+
+normal_print:
+    beqz $s1, continue_cell_print
+
+    li $v0, 4
+    la $a0, left_bracket
+    syscall
+
+    li $v0, 11
+    li $a0, 'X'
+    beq $s1, 1, pr_fullwin
+    li $a0, 'Y'
+pr_fullwin:
+    syscall
+
+    li $v0, 4
+    la $a0, right_bracket
+    syscall
+    j finish_cell
+
+continue_cell_print:
     la $t2, board
     sll $t3, $t0, 2
     add $t3, $t3, $t2
@@ -165,8 +209,8 @@ print_inner_loop:
     beqz $t4, print_index
     li $t5, 10
     divu $t4, $t5
-    mflo $t6     # player
-    mfhi $t7     # size
+    mflo $t6
+    mfhi $t7
     li $v0, 1
     move $a0, $t7
     syscall
@@ -189,7 +233,7 @@ print_index:
     la $a0, space
     syscall
     li $v0, 1
-    move $a0, $t0   # Print index number
+    move $a0, $t0
     syscall
     li $v0, 4
     la $a0, space
@@ -200,10 +244,10 @@ finish_cell:
     la $a0, right_bracket
     syscall
 
+skip_cell:
     addiu $t0, $t0, 1
     addiu $t1, $t1, 1
 
-    # Add vertical separator between mini-board columns
     li $t5, 3
     remu $t6, $t1, $t5
     bnez $t6, skip_extra_colspace
@@ -214,16 +258,12 @@ finish_cell:
     la $a0, space
     syscall
 skip_extra_colspace:
-
-    # Newline after every 9 cells (end of row)
     li $t5, 9
     remu $t6, $t0, $t5
     bnez $t6, skip_newline
     li $v0, 4
     la $a0, newline
     syscall
-
-    # Add horizontal separator between mini-board rows
     li $t5, 27
     remu $t6, $t0, $t5
     bnez $t6, skip_newline
@@ -233,7 +273,6 @@ skip_extra_colspace:
     li $v0, 4
     la $a0, dashline
     syscall
-
 skip_newline:
     li $t5, 81
     blt $t0, $t5, print_inner_loop
@@ -242,6 +281,7 @@ skip_newline:
     syscall
     jr $ra
 
+# check_mini_win and check_ultimate_win remain unchanged
 check_mini_win:
     move $s6, $s0      # Save mini-board index to $s6
     li $t0, 9
@@ -296,44 +336,99 @@ skip_mini_check:
     jr $ra
 
 check_ultimate_win:
-    la $t0, ultimate_win_indices
-    li $t1, 8
-    li $t2, 0
-loop_check:
-    lw $t3, 0($t0)
-    lw $t4, 4($t0)
-    lw $t5, 8($t0)
+    la $t0, mini_status  # Base address of mini_status
 
-    la $t6, mini_status
-    li $t7, 4
+    # Load all 9 mini board statuses
+    lw $t1, 0($t0)       # status[0]
+    lw $t2, 4($t0)       # status[1]
+    lw $t3, 8($t0)       # status[2]
+    lw $t4, 12($t0)      # status[3]
+    lw $t5, 16($t0)      # status[4]
+    lw $t6, 20($t0)      # status[5]
+    lw $t7, 24($t0)      # status[6]
+    lw $t8, 28($t0)      # status[7]
+    lw $t9, 32($t0)      # status[8]
 
-    mul $t8, $t3, $t7
-    add $t9, $t6, $t8
-    lw $s0, 0($t9)
+    # Check rows
+    bnez $t1, check_row1
+    j check_row2
+check_row1:
+    beq $t1, $t2, next_row1
+    j check_row2
+next_row1:
+    beq $t2, $t3, win_game
+check_row2:
+    bnez $t4, check_row2_val
+    j check_row3
+check_row2_val:
+    beq $t4, $t5, next_row2
+    j check_row3
+next_row2:
+    beq $t5, $t6, win_game
+check_row3:
+    bnez $t7, check_row3_val
+    j check_col1
+check_row3_val:
+    beq $t7, $t8, next_row3
+    j check_col1
+next_row3:
+    beq $t8, $t9, win_game
 
-    mul $t8, $t4, $t7
-    add $t9, $t6, $t8
-    lw $s1, 0($t9)
+    # Check columns
+check_col1:
+    bnez $t1, check_col1_val
+    j check_col2
+check_col1_val:
+    beq $t1, $t4, next_col1
+    j check_col2
+next_col1:
+    beq $t4, $t7, win_game
+check_col2:
+    bnez $t2, check_col2_val
+    j check_col3
+check_col2_val:
+    beq $t2, $t5, next_col2
+    j check_col3
+next_col2:
+    beq $t5, $t8, win_game
+check_col3:
+    bnez $t3, check_col3_val
+    j check_diag1
+check_col3_val:
+    beq $t3, $t6, next_col3
+    j check_diag1
+next_col3:
+    beq $t6, $t9, win_game
 
-    mul $t8, $t5, $t7
-    add $t9, $t6, $t8
-    lw $s2, 0($t9)
+    # Check diagonals
+check_diag1:
+    bnez $t1, check_diag1_val
+    j check_diag2
+check_diag1_val:
+    beq $t1, $t5, next_diag1
+    j check_diag2
+next_diag1:
+    beq $t5, $t9, win_game
+check_diag2:
+    bnez $t3, check_diag2_val
+    j end_check
+check_diag2_val:
+    beq $t3, $t5, next_diag2
+    j end_check
+next_diag2:
+    beq $t5, $t7, win_game
 
-    beqz $s0, skip
-    bne $s0, $s1, skip
-    bne $s1, $s2, skip
+end_check:
+    jr $ra
 
+win_game:
     li $v0, 4
     la $a0, msg_win
     syscall
+
     li $v0, 1
-    move $a0, $s7
-    syscall
-    li $v0, 10
+    move $a0, $s7      # Print current player
     syscall
 
-skip:
-    addiu $t0, $t0, 12
-    addiu $t2, $t2, 1
-    blt $t2, $t1, loop_check
-    jr $ra
+    li $v0, 10         # Exit
+    syscall
