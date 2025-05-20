@@ -63,5 +63,6 @@ There are two levels of victory:
 🥇 Mini Board Victory
 If you control all 3 cells in any mini board (line), you win that board
 The mini board becomes locked and marked as yours (X or Y)
+
 🏆 Ultimate Board Victory
 If you win 3 mini boards in a row (e.g. boards 0, 1, 2 or 0, 4, 8), you win the entire game
