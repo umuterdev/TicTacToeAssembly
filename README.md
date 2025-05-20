@@ -15,11 +15,13 @@ This game reimagines Ultimate Tic Tac Toe with a twist:
 
 ## 🧱 Memory Structure
 
-```assembly
+
 .data
 board:          .space 324     # 81 cells × 4 bytes each
 mini_status:    .space 36      # 9 mini boards (lines) × 4 bytes each
 current_target: .word -1       # Target mini board (-1 = free choice)
+
+
 
 board: Stores the state of each cell using encoding: player * 10 + stone_size
 mini_status: Tracks the winner of each line-based mini board
