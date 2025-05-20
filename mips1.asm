@@ -31,13 +31,13 @@ ultimate_win_indices:
 newline:            .asciiz "\n"
 space:              .asciiz " "
 msg_size:           .asciiz "Tas boyutu (1: kucuk, 2: orta, 3: buyuk): "
-msg_index:          .asciiz "Tahta hÃ¼cre indeksi (0-8): "
+msg_index:          .asciiz "Tahta hucre indeksi (0-8): "
 msg_choose_board:   .asciiz "Mini tahtayi secin (0-8): "
 msg_invalid_board:  .asciiz "Bu mini tahta dolu veya kazanilmis. Baska secin.\n"
 msg_invalid_move:   .asciiz "Gecersiz hamle! Tekrar deneyin.\n"
 msg_valid_move:     .asciiz "Hamle yapildi.\n"
 msg_turn1:          .asciiz "\nOyuncu 1'in sirasi\n"
-msg_turn2:          .asciiz "\nOyuncu 2'nin sirasi\n"
+msg_turn2:          .asciiz "\nOyuncu 2'in sirasi\n"
 msg_win:            .asciiz "\nOyunu kazanan oyuncu: "
 cell_empty:         .asciiz "[ ]"
 left_bracket:       .asciiz "["
@@ -67,14 +67,20 @@ show_target:
     syscall
     li $v0, 5
     syscall
-    move $t0, $v0
+    move $t0, $v0  # New stone size
+
+    # Validate stone size (must be 1, 2, or 3)
+    li $t2, 1
+    blt $t0, $t2, invalid_move
+    li $t2, 3
+    bgt $t0, $t2, invalid_move
 
     li $v0, 4
     la $a0, msg_index
     syscall
     li $v0, 5
     syscall
-    move $t1, $v0
+    move $t1, $v0  # Cell index
 
     li $t2, 9
     mul $t3, $s0, $t2
@@ -87,8 +93,12 @@ show_target:
     beqz $t6, store_stone
 
     li $t7, 10
-    remu $t8, $t6, $t7
-    ble $t0, $t8, invalid_move
+    divu $t6, $t7
+    mflo $t9     # Existing player
+    mfhi $t8     # Existing size
+
+    ble $t0, $t8, invalid_move  # Must be larger
+    beq $s7, $t9, invalid_move  # Can't overwrite own stone
 
 store_stone:
     li $t7, 10
@@ -161,51 +171,6 @@ ask_board_invalid:
     syscall
     j ask_board
 
-check_mini_win:
-    li $t0, 9
-    mul $t1, $s0, $t0
-    la $t2, mini_win_indices
-    li $t3, 8
-    li $t4, 0
-mini_win_loop:
-    lw $t5, 0($t2)
-    lw $t6, 4($t2)
-    lw $t7, 8($t2)
-
-    la $t8, board
-    add $t9, $t1, $t5
-    sll $t9, $t9, 2
-    add $a0, $t8, $t9
-    lw $s0, 0($a0)
-
-    add $t9, $t1, $t6
-    sll $t9, $t9, 2
-    add $a1, $t8, $t9
-    lw $s1, 0($a1)
-
-    add $t9, $t1, $t7
-    sll $t9, $t9, 2
-    add $a2, $t8, $t9
-    lw $s2, 0($a2)
-
-    beqz $s0, skip_mini_check
-    bne $s0, $s1, skip_mini_check
-    bne $s1, $s2, skip_mini_check
-
-    la $t9, mini_status
-    li $t0, 4
-    mul $t1, $s0, $t0
-    mul $t1, $s0, $t0
-    add $t9, $t9, $t1
-    sw $s7, 0($t9)
-    jr $ra
-
-skip_mini_check:
-    addiu $t2, $t2, 12
-    addiu $t4, $t4, 1
-    blt $t4, $t3, mini_win_loop
-    jr $ra
-
 check_ultimate_win:
     la $t0, ultimate_win_indices
     li $t1, 8
@@ -249,66 +214,116 @@ skip:
     blt $t2, $t1, loop_check
     jr $ra
 
+check_mini_win:
+    move $t5, $s0      # Save mini-board index
+    li $t0, 9
+    mul $t1, $s0, $t0
+    la $t2, mini_win_indices
+    li $t3, 8
+    li $t4, 0
+mini_win_loop:
+    lw $t5, 0($t2)
+    lw $t6, 4($t2)
+    lw $t7, 8($t2)
+
+    la $t8, board
+
+    add $t9, $t1, $t5
+    sll $t9, $t9, 2
+    add $a0, $t8, $t9
+    lw $s0, 0($a0)
+
+    add $t9, $t1, $t6
+    sll $t9, $t9, 2
+    add $a1, $t8, $t9
+    lw $s1, 0($a1)
+
+    add $t9, $t1, $t7
+    sll $t9, $t9, 2
+    add $a2, $t8, $t9
+    lw $s2, 0($a2)
+
+    li $t6, 10
+    divu $s0, $t6
+    mflo $s0
+    divu $s1, $t6
+    mflo $s1
+    divu $s2, $t6
+    mflo $s2
+
+    beqz $s0, skip_mini_check
+    bne $s0, $s1, skip_mini_check
+    bne $s1, $s2, skip_mini_check
+
+    la $t9, mini_status
+    mul $t8, $t5, 4          # Use saved mini-board index
+    add $t9, $t9, $t8
+    sw $s7, 0($t9)
+    jr $ra
+    jr $ra
+
+skip_mini_check:
+    addiu $t2, $t2, 12
+    addiu $t4, $t4, 1
+    blt $t4, $t3, mini_win_loop
+    jr $ra
+
 print_ultimate_board:
-    li $t0, 0
-row_loop:
-    li $t1, 0
-cell_row:
-    li $t2, 0
-mini_loop:
-    li $t3, 0
-inner_loop:
-    la $t4, board
-    li $t5, 4
-    mul $t6, $t0, $t5
-    add $t4, $t4, $t6
-    lw $t7, 0($t4)
+    li $t0, 0          # cell index
+print_outer_loop:
+    li $t1, 0          # column in row
+print_inner_loop:
+    la $t2, board
+    sll $t3, $t0, 2
+    add $t3, $t3, $t2
+    lw $t4, 0($t3)
+
     li $v0, 4
     la $a0, left_bracket
     syscall
-    beqz $t7, print_empty_cell
+
+    beqz $t4, print_space
     li $t5, 10
-    divu $t7, $t5
-    mflo $t8
-    mfhi $t9
+    divu $t4, $t5
+    mflo $t6     # player
+    mfhi $t7     # size
     li $v0, 1
-    move $a0, $t9
+    move $a0, $t7
     syscall
     li $v0, 11
     li $a0, 'x'
-    beq $t8, 1, pr_char
+    beq $t6, 1, pr_p
     li $a0, 'y'
-pr_char:
+pr_p:
     syscall
-    j after_cell
-print_empty_cell:
+    j print_close
+
+print_space:
     li $v0, 4
     la $a0, space
     syscall
     li $v0, 4
     la $a0, space
     syscall
-after_cell:
+
+print_close:
     li $v0, 4
     la $a0, right_bracket
     syscall
+
     addiu $t0, $t0, 1
-    addiu $t3, $t3, 1
-    li $t6, 3
-    blt $t3, $t6, inner_loop
-    li $v0, 4
-    la $a0, space
-    syscall
-    addiu $t2, $t2, 1
-    blt $t2, 3, mini_loop
-    li $v0, 4
-    la $a0, newline
-    syscall
     addiu $t1, $t1, 1
-    blt $t1, 3, cell_row
+    li $t5, 9
+    remu $t6, $t0, $t5
+    bnez $t6, skip_newline
     li $v0, 4
     la $a0, newline
     syscall
-    li $t6, 81
-    blt $t0, $t6, row_loop
+
+skip_newline:
+    li $t5, 81
+    blt $t0, $t5, print_inner_loop
+    li $v0, 4
+    la $a0, newline
+    syscall
     jr $ra
